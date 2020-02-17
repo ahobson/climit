@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -33,7 +34,7 @@ const (
 
 // implementation ideas taken from the openjdk implementation
 // https://github.com/openjdk/jdk/blob/d5686b87f31d6c57ec6b3e5e9c85a04209dbac7a/src/hotspot/os/linux/osContainer_linux.cpp#L487
-func climitNproc() (int, error) {
+func climitNproc(preferQuota bool) (int, error) {
 	var quotaCount int = 0
 	var shareCount int = 0
 	var cpuCount = runtime.NumCPU()
@@ -62,11 +63,14 @@ func climitNproc() (int, error) {
 
 
 	if (quotaCount != 0 && shareCount != 0) {
-		// for now, minimum of shares and quota
-		if (shareCount < quotaCount) {
-			limitCount = shareCount
-		} else {
+		if (preferQuota) {
 			limitCount = quotaCount
+		} else {
+			if (shareCount < quotaCount) {
+				limitCount = shareCount
+			} else {
+				limitCount = quotaCount
+			}
 		}
 	} else if (quotaCount != 0) {
 		limitCount = quotaCount
@@ -82,13 +86,16 @@ func climitNproc() (int, error) {
 }
 
 func main() {
-	if len(os.Args) != 2 {
+	if len(os.Args) == 1 {
 		fmt.Fprintf(os.Stderr, "Usage: %s nproc\n", os.Args[0])
 		os.Exit(2)
 	}
+	nprocCommand := flag.NewFlagSet("nproc", flag.ExitOnError)
+	preferQuota := nprocCommand.Bool("preferQuota", true, "prefer quota to shares")
 	switch os.Args[1] {
 	case "nproc":
-		nproc, err := climitNproc()
+		nprocCommand.Parse(os.Args[2:])
+		nproc, err := climitNproc(*preferQuota)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting nproc: %s\n", err)
 			os.Exit(1)
